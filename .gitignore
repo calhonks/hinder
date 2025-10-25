@@ -1,3 +1,9 @@
+.venv/
 venv/
-.env
+backend/.env
 pdfs/
+backend/chroma_data
+backend/data
+*.pyc
+__pycache__/
+**/__pycache__/
