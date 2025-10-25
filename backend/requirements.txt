@@ -1,2 +1,7 @@
 fastapi
+fastapi[standard]
+uvicorn[standard]
 brightdata-sdk
+python-dotenv
+pydantic
+simple-ats
