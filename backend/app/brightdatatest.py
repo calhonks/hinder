@@ -1,7 +1,8 @@
+from hmac import new
 import os
 import json
 import asyncio
-from typing import Dict
+from typing import Dict, List
 from dotenv import load_dotenv
 import httpx
 
@@ -10,113 +11,210 @@ load_dotenv()
 brightdata_token = os.getenv('BRIGHTDATA_API')
 assert type(brightdata_token) == str
 
+class LinkedInProfile():
 ### brightdata api functions ###
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self.snapshot_id = ''
+        self.result = ''
 
-# trigger the scrape based on linkedin url, return the snapshot id
-async def initiate_scrape(url: str) -> str:
-    headers = {
-        "Authorization": "Bearer " + brightdata_token,
-        "Content-Type": "application/json",
-    }
+    def validate_url(self, url: str) -> bool:
+        return url.startswith("https://www.linkedin.com/in") or url.startswith("https://linkedin.com/in") 
 
-    data = json.dumps({
-        "input": [{"url":url}],
-    })
+    # trigger the scrape based on linkedin url, return the snapshot id
+    async def initiate_scrape(self) -> bool:
+        headers = {
+            "Authorization": "Bearer " + brightdata_token,
+            "Content-Type": "application/json",
+        }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_l1viktl72bvl7bjuj0&notify=false&include_errors=true",
-            headers=headers,
-            content=data
-        )
-        return response.json()['snapshot_id']
+        if not self.validate_url(self.url):
+            print(f"Invalid URL: {self.url}")
+            return False
 
-# snapshot status check
-async def check_snapshot_status(snapshot_id: str) -> str:
-    url = "https://api.brightdata.com/datasets/v3/progress/" + snapshot_id
-    headers = {
-        "Authorization": "Bearer " + brightdata_token,
-    }
-    params = {
-        "format": "json",
-    }
-    
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers, params=params)
-        response_json = response.json()
-        return response_json['status']
+        data = json.dumps({
+            "input": [{"url":self.url}],
+        })
 
-# once snapshot ready, get data
-async def get_info_from_snapshot(snapshot_id: str) -> Dict:
-    url = "https://api.brightdata.com/datasets/v3/snapshot/" + snapshot_id
-    headers = {
-        "Authorization": "Bearer " + brightdata_token,
-    }
-    params = {
-        "format": "json",
-    }
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_l1viktl72bvl7bjuj0&notify=false&include_errors=true",
+                    headers=headers,
+                    content=data
+                )
+                response.raise_for_status()
+                response_data = response.json()
+                print(f"BrightData Response: {response_data}")
+                self.snapshot_id = response_data['snapshot_id']
+                return True
+        except Exception as e:
+            print(f"Error in initiate_scrape: {type(e).__name__}: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Response status: {e.response.status_code}")
+                print(f"Response body: {e.response.text}")
+            return False
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers, params=params)
-        return response.json()
-
-# put the process together, get the linkedin profile data
-async def scrape_linkedin_profile(url: str, poll_interval: int = 5) -> Dict:
-    """
-    Main async function to scrape a LinkedIn profile.
-    Can be called from a backend server to spawn async processes.
-    
-    Args:
-        url: LinkedIn profile URL
-        poll_interval: Seconds to wait between status checks (default: 5)
-    
-    Returns:
-        Dict containing the scraped profile data
-    """
-    # Step 1: Initiate the scrape and get snapshot_id
-    snapshot_id = await initiate_scrape(url)
-    print(f"Scrape initiated. Snapshot ID: {snapshot_id}")
-    
-    # Step 2: Poll until status is 'ready'
-    status = await check_snapshot_status(snapshot_id)
-    print(f"Current status: {status}")
-    
-    while status != 'ready':
-        await asyncio.sleep(poll_interval)  # Wait before checking again
-        status = await check_snapshot_status(snapshot_id)
-        print(f"Current status: {status}")
+    # snapshot status check
+    async def check_snapshot_status(self) -> bool:
+        url = "https://api.brightdata.com/datasets/v3/progress/" + self.snapshot_id
+        headers = {
+            "Authorization": "Bearer " + brightdata_token,
+        }
+        params = {
+            "format": "json",
+        }
         
-        if status == 'failed':
-            print(f"Error: Scraping failed for snapshot {snapshot_id}")
-            raise Exception(f"Scraping failed for snapshot {snapshot_id}")
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers, params=params)
+                response_json = response.json()
+                self.result = response_json['status']
+                return True
+        except:
+            return False
+    
+    # once snapshot ready, get data
+    async def get_info_from_snapshot(self) -> bool:
+        url = "https://api.brightdata.com/datasets/v3/snapshot/" + self.snapshot_id
+        headers = {
+            "Authorization": "Bearer " + brightdata_token,
+        }
+        params = {
+            "format": "json",
+        }
 
-    # Step 3: Get the final data
-    print("Status is ready! Fetching data...")
-    result = await get_info_from_snapshot(snapshot_id)
-    # under the assumption that result is always a single result
-    return result[0]
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers, params=params)
+                # under assumption that result is always a single result
+                self.result = response.json()[0]
+                return True
+        except:
+            return False
 
-### processing the linkedin profile data ###
+    # put the process together, get the linkedin profile data
+    async def scrape_linkedin_profile(self, poll_interval: int = 5) -> Dict:
+        """
+        Main async function to scrape a LinkedIn profile.
+        Can be called from a backend server to spawn async processes.
+        
+        Args:
+            poll_interval: Seconds to wait between status checks (default: 5)
+        
+        Returns:
+            Dict containing the scraped profile data
+        """
+        # Step 1: Initiate the scrape and get snapshot_id
+        success = await self.initiate_scrape()
+        if not success:
+            raise Exception("Failed to initiate scrape")
+        print(f"Scrape initiated. Snapshot ID: {self.snapshot_id}")
+        
+        # Step 2: Poll until status is 'ready'
+        success = await self.check_snapshot_status()
+        if not success:
+            raise Exception("Failed to check snapshot status")
+        print(f"Current status: {self.result}")
+        
+        while self.result != 'ready':
+            await asyncio.sleep(poll_interval)  # Wait before checking again
+            success = await self.check_snapshot_status()
+            if not success:
+                raise Exception("Failed to check snapshot status")
+            print(f"Current status: {self.result}")
+            
+            if self.result == 'failed':
+                print(f"Error: Scraping failed for snapshot {self.snapshot_id}")
+                raise Exception(f"Scraping failed for snapshot {self.snapshot_id}")
 
-# get linkedin id
-def linkedin_id(data: Dict) -> str:
-    return data['id']
+        # Step 3: Get the final data
+        print("Status is ready! Fetching data...")
+        success = await self.get_info_from_snapshot()
+        if not success:
+            raise Exception("Failed to get snapshot data")
+        # under the assumption that result is always a single result
+        return self.result
 
-# get linkedin name
-def linkedin_name(data: Dict) -> str:
-    return data['name']
+    ### processing the linkedin profile data ###
 
-# get linkedin location
-def linkedin_location(data: Dict) -> Dict:
-    return {'city': data['city'], 'country': data['country_code']}
+    # get linkedin id
+    def get_linkedin_id(self) -> str:
+        return self.result['id']
 
-# get current company
-def linkedin_current_company(data: Dict) -> Dict:
-    return {'company': data['company'], 'company_id': data['company_id'], 'title': data['title']}
+    # get linkedin name 
+    def get_linkedin_name(self) -> str:
+        return self.result['name']
 
-# get 
+    # get linkedin location
+    def get_linkedin_location(self) -> Dict:
+        return {'city': self.result['city'], 'country': self.result['country_code']}
 
+    # get current company
+    def get_linkedin_current_company(self) -> Dict:
+        curr_company = ''
+        if 'current_company' in self.result:
+            curr_company = self.result['current_company']
+        else:
+            return {'company': None,
+                    'company_id': None,
+                    'title': 'None'}
+
+        if self.result['current_company'] is not None:
+            return {'company': self.result['current_company']['name'] if self.result['current_company']['name'] is not None else None,
+                    'company_id': self.result['current_company']['company_id'] if self.result['current_company']['company_id'] is not None else None,
+                    'title': self.result['current_company']['title'] if self.result['current_company']['title'] is not None else None}
+
+    # get all experience
+    def get_linkedin_all_experience(self) -> List[Dict]:
+        out = []
+        if self.result['experience'] is not None:
+            for e in self.result['experience']:
+                if 'positions' in e:
+                    for p in e['positions']:
+                        new_entry = {}
+                        new_entry['company'] = e['company'] if 'company' in e else None
+                        new_entry['title'] = p['title'] if 'title' in p else None
+                        new_entry['start_date'] = p['start_date'] if 'start_date' in p else None
+                        new_entry['end_date'] = p['end_date'] if 'end_date' in p else None
+                        new_entry['description'] = p['description'] if 'description' in p else None
+                        out.append(new_entry)
+                else:
+                    new_entry = {}
+                    new_entry['company'] = e['company'] if 'company' in e else None
+                    new_entry['title'] = e['title'] if 'title' in e else None
+                    new_entry['start_date'] = e['start_date'] if 'start_date' in e else None
+                    new_entry['end_date'] = e['end_date'] if 'end_date' in e else None
+                    new_entry['description'] = e['description'] if 'description' in e else None
+                    out.append(new_entry)
+        return out
+
+    # get education
+    def get_linkedin_education(self) -> List[Dict]:
+        out = []
+        if self.result['education'] is not None:
+            for e in self.result['education']:
+                out.append({
+                    'school': e['title'],
+                    'degree': e['degree'] if 'degree' in e else None,
+                    'field': e['field'] if 'field' in e else None,
+                    'start_year': e['start_year'] if 'start_year' in e else None,
+                    'end_year': e['end_year'] if 'end_year' in e else None
+                })
+        return out
+    
 if __name__ == '__main__':
     # Example usage
-    result = asyncio.run(scrape_linkedin_profile('https://www.linkedin.com/in/daniel-hong-ucsc/'))
-    print(json.dumps(result, indent=2))
+    # result = asyncio.run(scrape_linkedin_profile('https://www.linkedin.com/in/daniel-hong-ucsc/'))
+    
+
+    profile = LinkedInProfile('https://www.linkedin.com/in/aytung/')
+    result = asyncio.run(profile.scrape_linkedin_profile())
+
+    # test the functions
+    print(profile.get_linkedin_id())
+    print(profile.get_linkedin_name())
+    print(profile.get_linkedin_location())
+    print(profile.get_linkedin_current_company())
+    print(profile.get_linkedin_all_experience())
+    print(profile.get_linkedin_education())
