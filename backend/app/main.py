@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl, field_validator
 from typing import Optional, Dict, Any, List
@@ -11,6 +11,8 @@ from datetime import datetime
 import hashlib
 
 import fitz
+
+from .brightdatatest import scrape_linkedin_profile
 
 
 # Load environment variables
@@ -54,6 +56,14 @@ class NewProfileInfo(BaseModel):
 class ProfileResponse(BaseModel):
     name: str
 
+class LinkedInScrapeRequest(BaseModel):
+    linkedin_url: str
+    
+class LinkedInScrapeResponse(BaseModel):
+    status: str
+    message: str
+    data: Optional[Dict[str, Any]] = None
+
 # Routes
 @app.get("/")
 def read_root():
@@ -67,6 +77,39 @@ def read_root():
 @app.post("/create-profile")
 async def create_profile(newprofile: NewProfileInfo):
     return newprofile
+
+# LinkedIn profile scraping
+@app.post("/scrape-linkedin", response_model=LinkedInScrapeResponse)
+async def scrape_linkedin(request: LinkedInScrapeRequest):
+    """
+    Scrape a LinkedIn profile asynchronously.
+    
+    Args:
+        request: LinkedInScrapeRequest containing the LinkedIn URL
+    
+    Returns:
+        LinkedInScrapeResponse with scraped profile data
+    """
+    try:
+        logger.info(f"Starting LinkedIn scrape for: {request.linkedin_url}")
+        
+        # Call the async scraping function
+        profile_data = await scrape_linkedin_profile(request.linkedin_url)
+        
+        logger.info(f"Successfully scraped LinkedIn profile: {request.linkedin_url}")
+        
+        return LinkedInScrapeResponse(
+            status="success",
+            message="LinkedIn profile scraped successfully",
+            data=profile_data
+        )
+    
+    except Exception as e:
+        logger.error(f"Error scraping LinkedIn profile: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error scraping LinkedIn profile: {str(e)}"
+        )
 
 # pdf upload & parse
 @app.post("/files", response_model=UploadPDFResponse)

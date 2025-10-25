@@ -6,3 +6,4 @@ python-dotenv
 pydantic
 simple-ats
 PyMuPDF
+httpx
