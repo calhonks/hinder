@@ -2,13 +2,15 @@ import os
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl, field_validator
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 from brightdata import bdclient
 import logging
 import json
 from datetime import datetime
+import hashlib
 
+import fitz
 
 
 # Load environment variables
@@ -34,24 +36,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class HealthResponse(BaseModel):
-    status: str
-    brightdata_configured: bool
-
 class DataInput(BaseModel):
     data: Dict[str, Any]
     filename: Optional[str] = None
 
-class SaveDataResponse(BaseModel):
-    status: str
-    message: str
-    file_path: str
-
 class UploadPDFResponse(BaseModel):
-    status: str
-    message: str
-    filename: str
-    file_path: str
+    file_id: str
+    file_name: str
+
+class NewProfileInfo(BaseModel):
+    linkedin_url: str
+    resume_file_id: str
+    resume_file_name: str
+    topics: List[str]
+    available_now: bool
+
+class ProfileResponse(BaseModel):
+    name: str
 
 # Routes
 @app.get("/")
@@ -62,42 +63,13 @@ def read_root():
         "docs": "/docs"
     }
 
-@app.post("/save-data", response_model=SaveDataResponse)
-async def save_data(input_data: DataInput):
-    """
-    Args:
-        input_data: DataInput object containing the data to save and optional filename
-    Returns:
-        SaveDataResponse with status, message, and file path
-    """
-    try:
-        # Generate filename with timestamp if not provided
-        if input_data.filename:
-            filename = f"{input_data.filename}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        else:
-            filename = f"data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        
-        # Save file in current working directory
-        file_path = os.path.abspath(filename)
-        
-        # Write data to file
-        with open(file_path, 'w', encoding='utf-8') as f:
-            # Write data as formatted JSON
-            json.dump(input_data.data, f, indent=2, ensure_ascii=False)
-        
-        logger.info(f"Data saved successfully to {file_path}")
-        
-        return SaveDataResponse(
-            status="success",
-            message="Data saved successfully",
-            file_path=file_path
-        )
-    
-    except Exception as e:
-        logger.error(f"Error saving data: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error saving data: {str(e)}")
+# profile creation
+@app.post("/create-profile")
+async def create_profile(newprofile: NewProfileInfo):
+    return newprofile
 
-@app.post("/upload-pdf", response_model=UploadPDFResponse)
+# pdf upload & parse
+@app.post("/files", response_model=UploadPDFResponse)
 async def upload_pdf(file: UploadFile = File(...)):
     """
     Saves an uploaded PDF file to a local directory.
@@ -116,11 +88,14 @@ async def upload_pdf(file: UploadFile = File(...)):
         # Create pdfs directory if it doesn't exist
         pdfs_dir = os.path.join(os.getcwd(), "pdfs")
         os.makedirs(pdfs_dir, exist_ok=True)
+        # Generate MD5 hash of file content
+        file_content = await file.read()
+        file_hash = hashlib.md5(file_content).hexdigest()
         
+        # Reset file pointer for later reading
+        await file.seek(0)
         # Generate unique filename with timestamp
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        original_filename = file.filename.replace(' ', '_')
-        filename = f"{timestamp}_{original_filename}"
+        filename = file.filename.replace(' ', '_')
         
         # Full file path
         file_path = os.path.join(pdfs_dir, filename)
@@ -130,14 +105,21 @@ async def upload_pdf(file: UploadFile = File(...)):
         
         with open(file_path, 'wb') as f:
             f.write(file_content)
+
+        # Parse PDF file
+        resume_text = ''
+        doc = fitz.open(file_path)
+        for page in doc:
+            text = page.get_text()
+            resume_text += text
+
+        # TODO: get info from resume text
         
         logger.info(f"PDF saved successfully to {file_path}")
         
         return UploadPDFResponse(
-            status="success",
-            message="PDF saved successfully",
-            filename=filename,
-            file_path=os.path.abspath(file_path)
+            file_id=file_hash,
+            file_name=filename
         )
     
     except Exception as e:

@@ -13,10 +13,12 @@ assert type(brightdata_token) == str
 
 client = bdclient(api_token=brightdata_token)
 
-def initiate_scrape(url: str) -> Dict[str, str]:
-    scrape_result = client.scrape_linkedin.profiles(url=url)
-    return scrape_result
-
+async def initiate_scrape(url: str) -> Dict[str, str]:
+    scrape_result = await client.scrape_linkedin.profiles(url=url)
+    result_json = json.dumps(scrape_result)
+    return result_json
 
 if __name__ == '__main__':
-    print(initiate_scrape('https://www.linkedin.com/in/daniel-hong-ucsc/'))
+
+    result = initiate_scrape('https://www.linkedin.com/in/daniel-hong-ucsc/')
+    print(result)
