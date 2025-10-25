@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `LinkedInProfile` class provides a Python interface for scraping LinkedIn profile data using the BrightData API. It handles the entire scraping lifecycle: initiating scrapes, polling for completion, and extracting structured profile information.
+The `LinkedInProfile` class (located in `app/services/brightdata.py`) provides a Python interface for scraping LinkedIn profile data using the BrightData API. It handles the entire scraping lifecycle: initiating scrapes, polling for completion, and extracting structured profile information.
 
 ## Prerequisites
 
@@ -319,7 +319,7 @@ education = profile.get_linkedin_education()
 
 ```python
 import asyncio
-from brightdatatest import LinkedInProfile
+from app.services.brightdata import LinkedInProfile
 
 async def main():
     # Initialize with LinkedIn URL

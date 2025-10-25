@@ -6,7 +6,7 @@ Run this script directly without pytest if preferred.
 
 import asyncio
 import sys
-from app.brightdatatest import LinkedInProfile
+from app.services.brightdata import LinkedInProfile
 
 
 # Test URLs

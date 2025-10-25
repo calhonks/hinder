@@ -1,6 +1,6 @@
 # LinkedIn Profile Scraper Tests
 
-This directory contains comprehensive unit tests for the LinkedIn Profile Scraper (`brightdatatest.py`).
+This directory contains comprehensive unit tests for the LinkedIn Profile Scraper (`app/services/brightdata.py`).
 
 ## Test Coverage
 
@@ -36,13 +36,13 @@ cd /mnt/c/Users/ddani/Documents/hackathons/hinder/backend
 pip install pytest pytest-asyncio
 
 # Run all tests with verbose output
-pytest tests/test_brightdatatest.py -v -s
+pytest tests/test_brightdata.py -v -s
 
 # Run specific test
-pytest tests/test_brightdatatest.py::TestLinkedInProfile::test_validate_url_valid -v
+pytest tests/test_brightdata.py::TestLinkedInProfile::test_validate_url_valid -v
 
 # Run only the complete profile extraction test
-pytest tests/test_brightdatatest.py::TestLinkedInProfile::test_complete_profile_extraction -v -s
+pytest tests/test_brightdata.py::TestLinkedInProfile::test_complete_profile_extraction -v -s
 ```
 
 ### Method 2: Using the standalone test runner
@@ -122,7 +122,7 @@ To run tests in CI/CD pipelines:
 - name: Run LinkedIn Scraper Tests
   run: |
     pip install -r requirements.txt
-    pytest tests/test_brightdatatest.py --tb=short
+    pytest tests/test_brightdata.py --tb=short
   env:
     BRIGHTDATA_API: ${{ secrets.BRIGHTDATA_API }}
 ```
@@ -130,7 +130,7 @@ To run tests in CI/CD pipelines:
 ## Adding New Test Profiles
 
 To test additional profiles, add URLs to the `TEST_URLS` list in either:
-- `tests/test_brightdatatest.py` (for pytest)
+- `tests/test_brightdata.py` (for pytest)
 - `run_tests.py` (for standalone runner)
 
 ## Notes

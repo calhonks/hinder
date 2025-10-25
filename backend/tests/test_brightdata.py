@@ -4,7 +4,7 @@ import os
 from typing import Dict, List
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from app.brightdatatest import LinkedInProfile
+from app.services.brightdata import LinkedInProfile
 
 
 class TestLinkedInProfile:
