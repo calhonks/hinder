@@ -7,3 +7,5 @@ pydantic
 simple-ats
 PyMuPDF
 httpx
+pytest
+pytest-asyncio

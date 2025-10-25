@@ -140,15 +140,21 @@ class LinkedInProfile():
 
     # get linkedin id
     def get_linkedin_id(self) -> str:
-        return self.result['id']
+        return self.result['id'] if self.result['id'] is not None else None
 
     # get linkedin name 
     def get_linkedin_name(self) -> str:
-        return self.result['name']
+        if 'name' in self.result:
+            return self.result['name'] if self.result['name'] is not None else None
+        elif 'first_name' in self.result and 'last_name' in self.result:
+            return self.result['first_name'] + ' ' + self.result['last_name'] if self.result['first_name'] is not None and self.result['last_name'] is not None else None
+        else:
+            return None
 
     # get linkedin location
     def get_linkedin_location(self) -> Dict:
-        return {'city': self.result['city'], 'country': self.result['country_code']}
+        return {'city': self.result['city'] if self.result['city'] is not None else None,
+                'country': self.result['country_code'] if self.result['country_code'] is not None else None}
 
     # get current company
     def get_linkedin_current_company(self) -> Dict:
