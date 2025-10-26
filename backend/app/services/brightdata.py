@@ -163,7 +163,7 @@ class LinkedInProfile():
         else:
             return {'company': None,
                     'company_id': None,
-                    'title': 'None'}
+                    'title': None}
 
         if self.result['current_company'] is not None:
             return {'company': self.result['current_company']['name'] if self.result['current_company']['name'] is not None else None,
