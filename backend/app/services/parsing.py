@@ -25,8 +25,26 @@ class ParseOutput(BaseModel):
     roles: List[RoleModel] = []
     skills: SkillsModel = SkillsModel()
     interests: List[str] = []
-    education: List[str] = []
-    links: List[str] = []
+    education: List[str] = []  # Can be list of strings or dict; we'll flatten it
+    links: List[str] = []  # Can be list of strings or dict; we'll flatten it
+    
+    @classmethod
+    def model_validate(cls, obj):
+        # Flatten education if it's a dict
+        if isinstance(obj.get("education"), dict):
+            edu = obj["education"]
+            obj["education"] = [f"{edu.get('degree', '')} from {edu.get('institution', '')}".strip()]
+        elif not isinstance(obj.get("education"), list):
+            obj["education"] = []
+        
+        # Flatten links if it's a dict
+        if isinstance(obj.get("links"), dict):
+            links_dict = obj["links"]
+            obj["links"] = [v for v in links_dict.values() if v]
+        elif not isinstance(obj.get("links"), list):
+            obj["links"] = []
+        
+        return super().model_validate(obj)
 
 
 SYSTEM_PROMPT = (
@@ -51,8 +69,10 @@ def _chunk_text(t: str, max_len: int = 12000) -> str:
 
 
 async def _call_anthropic(text: str) -> Dict[str, Any]:
+    if not text or not text.strip():
+        # No text to parse; return defaults
+        return _default_output()
     if not ANTHROPIC_API_KEY:
-        print("Here")
         return _default_output()
     url = "https://api.anthropic.com/v1/messages"
     headers = {
@@ -68,7 +88,6 @@ async def _call_anthropic(text: str) -> Dict[str, Any]:
             {"role": "user", "content": [{"type": "text", "text": text}]}
         ],
     }
-    print("Payload", payload)
     async with httpx.AsyncClient(timeout=30) as client:
         try:
             r = await client.post(url, headers=headers, json=payload)
@@ -78,7 +97,7 @@ async def _call_anthropic(text: str) -> Dict[str, Any]:
                 data = r.json()
             except Exception:
                 print("Anthropic non-JSON response status=", status)
-                print("Body:\n", r.text[:2000])
+                # print("Body:\n", r.text[:2000])
                 r.raise_for_status()
                 raise
             if status >= 400:
@@ -91,20 +110,27 @@ async def _call_anthropic(text: str) -> Dict[str, Any]:
     # Anthropic messages API: response in content[0].text
     content = data.get("content", [])
     if not content:
-        print("No content")
+        print("Anthropic response has no content")
         return _default_output()
     raw = content[0].get("text", "{}")
-    print("Raw:", raw)
+    print(f"Anthropic raw response (first 500 chars): {raw[:500]}")
     try:
         obj = json.loads(raw)
         parsed = ParseOutput.model_validate(obj)
-        return parsed.model_dump()
-    except (json.JSONDecodeError, ValidationError):
+        result = parsed.model_dump()
+        print(f"Parsed result: {result}")
+        return result
+    except (json.JSONDecodeError, ValidationError) as e:
+        print(f"Failed to parse Anthropic response: {e}")
+        print(f"Raw response: {raw}")
         return _default_output()
 
 
 async def extract(raw_text: str) -> Dict[str, Any]:
     text = _chunk_text(raw_text)
+    if not text or not text.strip():
+        # No text to parse; return defaults
+        return _default_output()
     # Retry up to 2 times on HTTP errors
     for _ in range(2):
         try:

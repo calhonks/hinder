@@ -29,5 +29,5 @@ def delete(profile_id: str) -> None:
     _collection.delete(ids=[profile_id])
 
 
-def query(query_embedding: List[float], n_results: int = 50, where: Optional[Dict[str, Any]] = None, where_not: Optional[Dict[str, Any]] = None):
-    return _collection.query(query_embeddings=[query_embedding], n_results=n_results, where=where, where_not=where_not)
+def query(query_embedding: List[float], n_results: int = 50, where: Optional[Dict[str, Any]] = None):
+    return _collection.query(query_embeddings=[query_embedding], n_results=n_results, where=where)

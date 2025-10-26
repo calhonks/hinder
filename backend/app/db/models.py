@@ -45,6 +45,8 @@ class Profile(SQLModel, table=True):
     source: Optional[str] = None
     hackathon: Optional[str] = None
     last_linkedin_enrich_at: Optional[datetime] = None
+    # Contact info: JSON dict like {"discord": {"value": "user#1234", "visible": true}, "instagram": {...}, ...}
+    contact_info_json: str = Field(default_factory=lambda: json.dumps({}))
 
 
 class MatchLog(SQLModel, table=True):

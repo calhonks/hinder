@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
@@ -19,6 +19,7 @@ class ProfileModel(BaseModel):
     interests: List[str] = []
     topics: List[str] = []
     available_now: bool = False
+    contact_info: Dict[str, Any] = {}
     created_at: str
     updated_at: str
     hackathon: Optional[str] = None
@@ -32,6 +33,7 @@ class CreateProfileInput(BaseModel):
     topics: List[str]
     available_now: bool
     hackathon: Optional[str] = None
+    contact_info: Optional[Dict[str, Any]] = None
 
 
 class ProfileWithStatus(BaseModel):
@@ -50,3 +52,4 @@ class PatchProfileInput(BaseModel):
     resume_file_id: Optional[str] = None
     resume_file_name: Optional[str] = None
     hackathon: Optional[str] = None
+    contact_info: Optional[Dict[str, Any]] = None

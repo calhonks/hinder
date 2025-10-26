@@ -6,7 +6,7 @@ from ..deps import get_db
 from ..db.models import Profile, MatchLog
 from ..services.matching import retrieve_candidates, blend_scores
 from ..services.explanations import rationale
-from ..utils.json import json_to_list
+from ..utils.json import json_to_list, json_to_dict
 
 router = APIRouter(prefix="/matches", tags=["matches"]) 
 
@@ -53,6 +53,7 @@ async def get_matches(user_id: str, k: int = 20, topic: Optional[str] = None, ha
             "interests": json_to_list(p.interests_json),
             "topics": json_to_list(p.topics_json),
             "available_now": p.available_now,
+            "contact_info": json_to_dict(getattr(p, "contact_info_json", None)),
             "created_at": p.created_at.isoformat(),
             "updated_at": p.updated_at.isoformat(),
             "hackathon": p.hackathon,

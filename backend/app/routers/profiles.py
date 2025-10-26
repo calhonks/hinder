@@ -8,7 +8,7 @@ from ..db.models import Profile, Upload, User
 from ..schemas.profiles import CreateProfileInput, ProfileWithStatus, ProfileModel, PatchProfileInput
 from ..services.pipeline import run as pipeline_run, delete_profile_index
 from ..utils.ids import new_id
-from ..utils.json import list_to_json, json_to_list
+from ..utils.json import list_to_json, json_to_list, dict_to_json, json_to_dict
 from ..config import UPLOAD_DIR
 import os
 from ..services.auth import decode_token
@@ -32,6 +32,7 @@ def to_model(p: Profile) -> ProfileModel:
         interests=json_to_list(p.interests_json),
         topics=json_to_list(p.topics_json),
         available_now=p.available_now,
+        contact_info=json_to_dict(getattr(p, "contact_info_json", None)),
         created_at=p.created_at.isoformat(),
         updated_at=p.updated_at.isoformat(),
         hackathon=p.hackathon,
@@ -63,6 +64,7 @@ async def create_profile(
         raise HTTPException(status_code=400, detail="Consent is required")
 
     pid = new_id("u")
+    contact_info_json = dict_to_json(input.contact_info)
     prof = Profile(
         id=pid,
         user_id=current_user.id,
@@ -72,6 +74,7 @@ async def create_profile(
         topics_json=list_to_json(input.topics),
         interests_json=list_to_json(input.topics),
         available_now=input.available_now,
+        contact_info_json=contact_info_json,
         status="pending",
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -81,7 +84,7 @@ async def create_profile(
     db.add(prof)
     db.commit()
 
-    background.add_task(pipeline_run, db, pid)
+    background.add_task(pipeline_run, pid)
     return ProfileWithStatus(profile=to_model(prof), status=prof.status)
 
 
@@ -149,6 +152,9 @@ async def patch_profile(
         changed = True
     if patch.available_now is not None:
         p.available_now = patch.available_now
+        changed = True
+    if patch.contact_info is not None:
+        p.contact_info_json = dict_to_json(patch.contact_info)
         changed = True
 
     if changed:

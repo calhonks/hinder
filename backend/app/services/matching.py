@@ -28,13 +28,24 @@ def retrieve_candidates(user_profile: Dict[str, Any], k: int = 20, topic: Option
     where = {"available_now": True}
     if hackathon:
         where["hackathon"] = hackathon
-    where_not = {"id": exclude_id} if exclude_id else None
 
-    res = chroma_query(qvec, n_results=max(50, k), where=where, where_not=where_not)
+    # Chroma python client may not support 'where_not' – query first then filter
+    res = chroma_query(qvec, n_results=max(50, k), where=where)
+
     # chroma returns dict with metadatas, ids, distances or similar. We'll use metadatas.
     ids = res.get("ids", [[]])[0]
     metas = res.get("metadatas", [[]])[0]
     embs_scores = res.get("distances", [[]])[0] if "distances" in res else None
+
+    # filter excluded id if provided
+    if exclude_id:
+        filtered = [(i, m, d) for i, m, d in zip(ids, metas, embs_scores or [None]*len(ids)) if i != exclude_id]
+        if filtered:
+            ids, metas, embs_scores = zip(*filtered)
+            ids, metas, embs_scores = list(ids), list(metas), list(embs_scores)
+        else:
+            ids, metas, embs_scores = [], [], []
+
     return ids, metas, embs_scores
 
 

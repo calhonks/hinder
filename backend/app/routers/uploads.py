@@ -53,5 +53,6 @@ async def upload_pdf(
     upload = Upload(file_id=file_id, user_id=current_user.id, path=path, mime="application/pdf", size=len(content))
     db.add(upload)
     db.commit()
+    print(f"[uploads] saved file_id={file_id} path={path} user_id={current_user.id}")
 
     return UploadPDFResponse(file_id=file_id, file_name=filename)
