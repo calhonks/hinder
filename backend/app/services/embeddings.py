@@ -8,7 +8,7 @@ from ..config import EMBEDDINGS_PROVIDER, GEMINI_API_KEY
 # Dev-friendly deterministic embedding without external calls.
 # Hash n-grams into a fixed-size vector.
 
-DIM = 512
+DIM = 768
 
 
 def _tokenize(text: str) -> List[str]:
@@ -40,7 +40,7 @@ def _embed_gemini(text: str) -> List[float]:
     params = {"key": GEMINI_API_KEY}
     payload = {"model": "text-embedding-004", "content": {"parts": [{"text": text[:8000]}]}}
     try:
-        resp = httpx.post(url, params=params, json=payload, timeout=15)
+        resp = httpx.post(url, params=params, json=payload, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         vec = data.get("embedding", {}).get("values")
