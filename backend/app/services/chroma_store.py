@@ -4,6 +4,7 @@ import chromadb
 from chromadb.config import Settings
 from ..config import CHROMA_DIR, CHROMA_COLLECTION
 import os
+import json
 
 os.makedirs(CHROMA_DIR, exist_ok=True)
 _client = chromadb.PersistentClient(path=CHROMA_DIR, settings=Settings(anonymized_telemetry=False))
@@ -11,7 +12,17 @@ _collection = _client.get_or_create_collection(name=CHROMA_COLLECTION, metadata=
 
 
 def upsert(profile_id: str, embedding: List[float], metadata: Dict[str, Any]) -> None:
-    _collection.upsert(ids=[profile_id], embeddings=[embedding], metadatas=[metadata])
+    # Chroma requires metadata values to be primitives. JSON-encode others.
+    sanitized: Dict[str, Any] = {}
+    for k, v in (metadata or {}).items():
+        if isinstance(v, (str, int, float, bool)) or v is None:
+            sanitized[k] = v
+        else:
+            try:
+                sanitized[k] = json.dumps(v)
+            except Exception:
+                sanitized[k] = str(v)
+    _collection.upsert(ids=[profile_id], embeddings=[embedding], metadatas=[sanitized])
 
 
 def delete(profile_id: str) -> None:

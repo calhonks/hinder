@@ -4,6 +4,7 @@ import json
 import httpx
 from pydantic import BaseModel, ValidationError
 from ..config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+import traceback
 
 
 class SkillsModel(BaseModel):
@@ -51,6 +52,7 @@ def _chunk_text(t: str, max_len: int = 12000) -> str:
 
 async def _call_anthropic(text: str) -> Dict[str, Any]:
     if not ANTHROPIC_API_KEY:
+        print("Here")
         return _default_output()
     url = "https://api.anthropic.com/v1/messages"
     headers = {
@@ -61,21 +63,38 @@ async def _call_anthropic(text: str) -> Dict[str, Any]:
     payload = {
         "model": CLAUDE_MODEL,
         "max_tokens": 1024,
-        "response_format": {"type": "json_object"},
         "system": SYSTEM_PROMPT,
         "messages": [
             {"role": "user", "content": [{"type": "text", "text": text}]}
         ],
     }
+    print("Payload", payload)
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(url, headers=headers, json=payload)
-        r.raise_for_status()
-        data = r.json()
+        try:
+            r = await client.post(url, headers=headers, json=payload)
+            status = r.status_code
+            # Try JSON first; if fails, log text
+            try:
+                data = r.json()
+            except Exception:
+                print("Anthropic non-JSON response status=", status)
+                print("Body:\n", r.text[:2000])
+                r.raise_for_status()
+                raise
+            if status >= 400:
+                # Error payloads are JSON; print them
+                print("Anthropic error status=", status, "body=", data)
+                r.raise_for_status()
+        except Exception:
+            print("Anthropic request failed:\n" + traceback.format_exc())
+            return _default_output()
     # Anthropic messages API: response in content[0].text
     content = data.get("content", [])
     if not content:
+        print("No content")
         return _default_output()
     raw = content[0].get("text", "{}")
+    print("Raw:", raw)
     try:
         obj = json.loads(raw)
         parsed = ParseOutput.model_validate(obj)

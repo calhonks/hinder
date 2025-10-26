@@ -19,7 +19,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 EMBEDDINGS_PROVIDER = os.getenv("EMBEDDINGS_PROVIDER", "local")  # local|gemini
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20240620")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-3-5-haiku-latest")
 
 RERANK_PROVIDER = os.getenv("RERANK_PROVIDER", "none")
 RERANK_ENDPOINT = os.getenv("RERANK_ENDPOINT", "")

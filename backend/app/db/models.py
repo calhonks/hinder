@@ -7,6 +7,7 @@ import json
 
 class Upload(SQLModel, table=True):
     file_id: str = Field(primary_key=True)
+    user_id: int
     path: str
     mime: str
     size: int
@@ -18,11 +19,13 @@ class User(SQLModel, table=True):
     name: str
     email: str = Field(index=True, sa_column_kwargs={"unique": True})
     password_hash: str
+    is_admin: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class Profile(SQLModel, table=True):
     id: str = Field(primary_key=True)
+    user_id: Optional[int] = None
     name: Optional[str] = None
     headline: Optional[str] = None
     email: Optional[str] = None
@@ -41,6 +44,7 @@ class Profile(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     source: Optional[str] = None
     hackathon: Optional[str] = None
+    last_linkedin_enrich_at: Optional[datetime] = None
 
 
 class MatchLog(SQLModel, table=True):

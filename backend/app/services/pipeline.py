@@ -8,7 +8,8 @@ from .normalize import normalize_list
 from .embeddings import embed
 from .chroma_store import upsert as chroma_upsert, delete as chroma_delete
 from .sse import broker
-from datetime import datetime
+from datetime import datetime, timezone
+import traceback
 
 
 def _json_list(s: Optional[str]) -> List[str]:
@@ -35,6 +36,7 @@ async def run(db: Session, profile_id: str) -> None:
     if not prof:
         return
     try:
+        print(f"[pipeline] start profile_id={profile_id}")
         prof.status = "parsing"
         db.add(prof)
         db.commit()
@@ -46,13 +48,20 @@ async def run(db: Session, profile_id: str) -> None:
         if prof.resume_file_id:
             up = db.get(Upload, prof.resume_file_id)
             if up and up.path:
-                raw_text_parts.append(extract_text(up.path))
+                try:
+                    txt = extract_text(up.path)
+                    raw_text_parts.append(txt)
+                    print(f"[pipeline] extracted PDF text bytes={len(txt or '')}")
+                except Exception:
+                    print("[pipeline] PDF extract failed:\n" + traceback.format_exc())
 
         # ingest from linkedin url via brightdata later (stubbed)
 
         raw_text = "\n".join([p for p in raw_text_parts if p])
+        print(f"[pipeline] total raw_text chars={len(raw_text)}")
 
         parsed = await parse_extract(raw_text)
+        print(f"[pipeline] parsed keys={list(parsed.keys()) if isinstance(parsed, dict) else type(parsed)}")
 
         # update basic fields (best-effort)
         prof.name = prof.name or parsed.get("name")
@@ -61,18 +70,24 @@ async def run(db: Session, profile_id: str) -> None:
         domain = parsed.get("skills", {}).get("domain", [])
         skills_norm = normalize_list(list(set((_json_list(prof.skills_norm_json) + tech + domain))))
         topics = normalize_list(list(set((_json_list(prof.topics_json)))))
+        print(f"[pipeline] skills_norm_count={len(skills_norm)} topics_count={len(topics)}")
         prof.skills_norm_json = _list_json(skills_norm)
         prof.topics_json = _list_json(topics)
 
         prof.status = "embedding"
-        prof.updated_at = datetime.utcnow()
+        prof.updated_at = datetime.now(timezone.utc)
         db.add(prof)
         db.commit()
         await broker.publish(profile_id, {"status": "embedding"})
 
         # build summary and embed
         summary = _summary(prof)
-        vec = embed(summary)
+        try:
+            vec = embed(summary)
+            print(f"[pipeline] embedding_dim={len(vec) if hasattr(vec, '__len__') else 'unknown'}")
+        except Exception:
+            print("[pipeline] embed failed:\n" + traceback.format_exc())
+            raise
 
         metadata = {
             "id": prof.id,
@@ -86,15 +101,22 @@ async def run(db: Session, profile_id: str) -> None:
             "available_now": prof.available_now,
             "hackathon": prof.hackathon,
         }
-        chroma_upsert(profile_id, vec, metadata)
+        print(metadata)
+        try:
+            chroma_upsert(profile_id, vec, metadata)
+            print("[pipeline] chroma upsert ok")
+        except Exception:
+            print("[pipeline] chroma upsert failed:\n" + traceback.format_exc())
+            raise
 
         prof.status = "ready"
-        prof.updated_at = datetime.utcnow()
+        prof.updated_at = datetime.now(timezone.utc)
         db.add(prof)
         db.commit()
         await broker.publish(profile_id, {"status": "ready"})
 
     except Exception:
+        print("[pipeline] ERROR:\n" + traceback.format_exc())
         prof = db.get(Profile, profile_id)
         if prof:
             prof.status = "error"

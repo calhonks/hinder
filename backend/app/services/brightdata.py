@@ -2,14 +2,13 @@ from hmac import new
 import os
 import json
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Any
 from dotenv import load_dotenv
 import httpx
 
 load_dotenv()
 
-brightdata_token = os.getenv('BRIGHTDATA_API')
-assert type(brightdata_token) == str
+brightdata_token = os.getenv('BRIGHTDATA_API') or os.getenv('BRIGHTDATA_API_KEY') or ''
 
 class LinkedInProfile():
 ### brightdata api functions ###
@@ -209,18 +208,24 @@ class LinkedInProfile():
                 })
         return out
     
+# Adapter to match router expectation
+async def enrich_profile(linkedin_url: str) -> Dict[str, Any]:
+    """Runs the Bright Data scrape and returns a normalized result.
+    Returns { enriched: bool, data?: dict, error?: str }
+    """
+    token = os.getenv('BRIGHTDATA_API') or os.getenv('BRIGHTDATA_API_KEY') or ''
+    if not token:
+        return {"enriched": False, "error": "missing_token"}
+    try:
+        profile = LinkedInProfile(linkedin_url)
+        data = await profile.scrape_linkedin_profile()
+        return {"enriched": True, "data": data}
+    except Exception as e:
+        return {"enriched": False, "error": str(e)}
+
 if __name__ == '__main__':
-    # Example usage
-    # result = asyncio.run(scrape_linkedin_profile('https://www.linkedin.com/in/daniel-hong-ucsc/'))
-    
-
-    profile = LinkedInProfile('https://www.linkedin.com/in/aytung/')
-    result = asyncio.run(profile.scrape_linkedin_profile())
-
-    # test the functions
-    print(profile.get_linkedin_id())
-    print(profile.get_linkedin_name())
-    print(profile.get_linkedin_location())
-    print(profile.get_linkedin_current_company())
-    print(profile.get_linkedin_all_experience())
-    print(profile.get_linkedin_education())
+    # Example usage for manual testing only
+    test_url = os.getenv('TEST_LINKEDIN_URL', 'https://www.linkedin.com/in/example/')
+    p = LinkedInProfile(test_url)
+    result = asyncio.run(p.scrape_linkedin_profile())
+    print(json.dumps(result, indent=2))

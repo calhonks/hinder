@@ -1,16 +1,17 @@
 from __future__ import annotations
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
 from sqlmodel import Session
 from datetime import datetime
 from typing import Optional
 from ..deps import get_db
-from ..db.models import Profile, Upload
+from ..db.models import Profile, Upload, User
 from ..schemas.profiles import CreateProfileInput, ProfileWithStatus, ProfileModel, PatchProfileInput
 from ..services.pipeline import run as pipeline_run, delete_profile_index
 from ..utils.ids import new_id
 from ..utils.json import list_to_json, json_to_list
 from ..config import UPLOAD_DIR
 import os
+from ..services.auth import decode_token
 
 router = APIRouter(prefix="/profiles", tags=["profiles"]) 
 
@@ -38,13 +39,33 @@ def to_model(p: Profile) -> ProfileModel:
 
 
 @router.post("", response_model=ProfileWithStatus)
-async def create_profile(input: CreateProfileInput, background: BackgroundTasks, db: Session = Depends(get_db)):
+async def create_profile(
+    input: CreateProfileInput,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    # Require auth and resolve current user
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ", 1)[1]
+    data = decode_token(token)
+    if not data:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    uid = data.get("sub")
+    try:
+        current_user = db.get(User, int(uid))
+    except Exception:
+        current_user = None
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     if not input.consent:
         raise HTTPException(status_code=400, detail="Consent is required")
 
     pid = new_id("u")
     prof = Profile(
         id=pid,
+        user_id=current_user.id,
         linkedin_url=input.linkedin_url,
         resume_file_id=input.resume_file_id,
         resume_file_name=input.resume_file_name,
@@ -65,18 +86,50 @@ async def create_profile(input: CreateProfileInput, background: BackgroundTasks,
 
 
 @router.get("/{profile_id}", response_model=ProfileWithStatus)
-async def get_profile(profile_id: str, db: Session = Depends(get_db)):
+async def get_profile(
+    profile_id: str,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    # Require auth and enforce ownership
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ", 1)[1]
+    data = decode_token(token)
+    if not data:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    uid = str(data.get("sub"))
+
     p = db.get(Profile, profile_id)
     if not p:
         raise HTTPException(status_code=404, detail="Profile not found")
+    if str(p.user_id) != uid:
+        raise HTTPException(status_code=403, detail="Forbidden")
     return ProfileWithStatus(profile=to_model(p), status=p.status)
 
 
 @router.patch("/{profile_id}")
-async def patch_profile(profile_id: str, patch: PatchProfileInput, background: BackgroundTasks, db: Session = Depends(get_db)):
+async def patch_profile(
+    profile_id: str,
+    patch: PatchProfileInput,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    # Require auth and enforce ownership
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ", 1)[1]
+    data = decode_token(token)
+    if not data:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    uid = str(data.get("sub"))
+
     p = db.get(Profile, profile_id)
     if not p:
         raise HTTPException(status_code=404, detail="Profile not found")
+    if str(p.user_id) != uid:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     changed = False
     for field in ["name", "headline", "linkedin_url", "resume_file_id", "resume_file_name", "hackathon"]:
@@ -114,10 +167,26 @@ async def patch_profile(profile_id: str, patch: PatchProfileInput, background: B
 
 
 @router.post("/{profile_id}/reembed")
-async def reembed(profile_id: str, background: BackgroundTasks, db: Session = Depends(get_db)):
+async def reembed(
+    profile_id: str,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    # Require auth and enforce ownership
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ", 1)[1]
+    data = decode_token(token)
+    if not data:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    uid = str(data.get("sub"))
+
     p = db.get(Profile, profile_id)
     if not p:
         raise HTTPException(status_code=404, detail="Profile not found")
+    if str(p.user_id) != uid:
+        raise HTTPException(status_code=403, detail="Forbidden")
     p.status = "pending"
     p.updated_at = datetime.utcnow()
     db.add(p)
@@ -127,10 +196,25 @@ async def reembed(profile_id: str, background: BackgroundTasks, db: Session = De
 
 
 @router.delete("/{profile_id}")
-async def delete_profile(profile_id: str, db: Session = Depends(get_db)):
+async def delete_profile(
+    profile_id: str,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    # Require auth and enforce ownership
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ", 1)[1]
+    data = decode_token(token)
+    if not data:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    uid = str(data.get("sub"))
+
     p = db.get(Profile, profile_id)
     if not p:
         return {"ok": True}
+    if str(p.user_id) != uid:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     # delete from chroma
     delete_profile_index(profile_id)
